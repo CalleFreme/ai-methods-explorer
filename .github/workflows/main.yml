@@ -33,6 +33,10 @@ jobs:
         uses: actions/setup-node@v3
         with:
           node-version: "16"
+      - name: Verify package.json and package-lock.json
+        run: |
+          cd frontend
+          npm install --package-lock-only
       - name: Install dependencies
         run: |
           cd frontend
