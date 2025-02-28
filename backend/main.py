@@ -11,7 +11,7 @@ load_dotenv()
 # Initialize FastAPI
 app = FastAPI(title="AI Methods Explorer")
 
-# Configure CORS
+# Configure CORS, allowing requests from the frontend
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000"],  # Frontend URL
