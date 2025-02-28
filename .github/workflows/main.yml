@@ -35,13 +35,13 @@ jobs:
           node-version: "16"
       - name: Verify package.json and package-lock.json
         run: |
-          cd frontend
+          cd frontend/ai-methods-explorer
           npm install --package-lock-only
       - name: Install dependencies
         run: |
-          cd frontend
+          cd frontend/ai-methods-explorer
           npm ci
       - name: Build
         run: |
-          cd frontend
+          cd frontend/ai-methods-explorer
           npm run build
