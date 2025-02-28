@@ -68,6 +68,8 @@ async def analyze_sentiment(input_data: TextInput):
     headers = {"Authorization": f"Bearer {os.getenv('HF_API_KEY', '')}"}
     
     try:
+        # Truncate text to 512 tokens
+        input_data.text = input_data.text[:512]
         response = requests.post(
             API_URL,
             headers=headers,
@@ -91,6 +93,8 @@ async def analyze_sentiment(input_data: TextInput):
         # TODO: Log request to db
         return result
     except requests.exceptions.RequestException as e:   # Catch all requests exceptions
+        if "413" in str(e):  # Payload Too Large
+            raise HTTPException(status_code=400, detail="Text is too long. Please use a shorter text (maximum 500 words).")
         raise HTTPException(status_code=500, detail=f"API request failed: {str(e)}")
     except Exception as e:  # Catch all other exceptions
         raise HTTPException(status_code=500, detail=f"Error processing request: {str(e)}")
