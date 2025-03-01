@@ -16,6 +16,11 @@
 .env.test.local
 .env.production.local
 
+# Database files
+*.db
+*.sqlite3
+*.sqlite
+
 # Python
 __pycache__/
 *.py[cod]
