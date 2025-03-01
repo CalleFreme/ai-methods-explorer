@@ -1,9 +1,12 @@
+import json
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import requests
 import os
 from dotenv import load_dotenv
+import sqlite3
+from contextlib import contextmanager
 
 # Load environment variables
 load_dotenv()
@@ -20,6 +23,35 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+DATABASE_URL = "ai_explorer.db"
+
+def init_db():
+    with sqlite3.connect(DATABASE_URL) as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS requests (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                endpoint TEXT NOT NULL,
+                input_text TEXT NOT NULL,
+                result TEXT NOT NULL,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.commit()
+
+@contextmanager
+def get_db():
+    conn = sqlite3.connect(DATABASE_URL)
+    try:
+        yield conn
+    finally:
+        conn.close()
+
+# Initialize database on startup
+@app.on_event("startup")
+async def startup_event():
+    init_db()
+
 # Define data models
 class TextInput(BaseModel):
     text: str
@@ -28,6 +60,15 @@ class AIResponse(BaseModel):
     endpoint: str
     input_text: str
     result: str
+
+def log_request(db, endpoint: str, input_text: str, result: str):
+    cursor = db.cursor()
+    cursor.execute("""
+        INSERT INTO requests (endpoint, input_text, result)
+        VALUES (?, ?, ?)
+    """, (endpoint, input_text, result)
+    )
+    db.commit()
 
 # Root endpoint
 @app.get("/")
@@ -53,6 +94,8 @@ async def summarize_text(input_data: TextInput):
         if not result or not isinstance(result, list) or len(result) == 0:
             raise ValueError("Invalid response format from API")
         # TODO: Log request to db
+        with get_db() as db:
+            log_request(db, "summarize", input_data.text, result[0]["summary_text"])
         return {"result": result[0]["summary_text"]}
     
     except requests.exceptions.RequestException as e:
@@ -89,8 +132,9 @@ async def analyze_sentiment(input_data: TextInput):
             "sentiment": sentiment_data["label"],
             "score": sentiment_data["score"]
         }
-
         # TODO: Log request to db
+        with get_db() as db:
+            log_request(db, "sentiment", input_data.text, json.dumps(result))
         return result
     except requests.exceptions.RequestException as e:   # Catch all requests exceptions
         if "413" in str(e):  # Payload Too Large
@@ -121,3 +165,24 @@ async def get_available_methods():
     }
 
 # TODO: Recent API usage history
+@app.get("/api/history")
+async def get_request_history(limit: int = 10):
+    with get_db() as db:
+        cursor = db.cursor()
+        cursor.execute(
+            "SELECT endpoint, input_text, result, timestamp FROM requests ORDER BY timestamp DESC LIMIT ?",
+            (limit,)
+        )
+        records = cursor.fetchall()
+        
+        return {
+            "history": [
+                {
+                    "endpoint": record[0],
+                    "input_text": record[1],
+                    "result": record[2],
+                    "timestamp": record[3]
+                }
+                for record in records
+            ]
+        }
