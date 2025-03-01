@@ -6,26 +6,21 @@ import requests
 import os
 from dotenv import load_dotenv
 import sqlite3
-from contextlib import contextmanager
+from contextlib import asynccontextmanager, contextmanager
+from typing import Optional
 
 # Load environment variables
 load_dotenv()
 
-# Initialize FastAPI
-app = FastAPI(title="AI Methods Explorer")
-
-# Configure CORS, allowing requests from the frontend
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # Frontend URL
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-DATABASE_URL = "ai_explorer.db"
+# Configures database path - allow customization via environment variable
+# Helps in testing where file paths might be restricted
+DATABASE_URL = os.environ.get('DATABASE_URL', 'ai-explorer.db')
 
 def init_db():
+    # Make sure the directory exists if using a path with directories
+    if DATABASE_URL != ':memory:' and '/' in DATABASE_URL:
+        os.makedirs(os.path.dirname(DATABASE_URL), exist_ok=True)
+
     with sqlite3.connect(DATABASE_URL) as conn:
         cursor = conn.cursor()
         cursor.execute("""
@@ -47,10 +42,24 @@ def get_db():
     finally:
         conn.close()
 
-# Initialize database on startup
-@app.on_event("startup")
-async def startup_event():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
     init_db()
+    yield
+    # Shutdown, cleanup if needed
+
+# Initialize FastAPI with lifespan function
+app = FastAPI(title="AI Methods Explorer", lifespan=lifespan)
+
+# Configure CORS, allowing requests from the frontend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],  # Frontend URL
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Define data models
 class TextInput(BaseModel):
