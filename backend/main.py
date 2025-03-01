@@ -1,4 +1,5 @@
 import json
+import traceback
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -21,26 +22,38 @@ def init_db():
     if DATABASE_URL != ':memory:' and '/' in DATABASE_URL:
         os.makedirs(os.path.dirname(DATABASE_URL), exist_ok=True)
 
-    with sqlite3.connect(DATABASE_URL) as conn:
-        cursor = conn.cursor()
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS requests (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                endpoint TEXT NOT NULL,
-                input_text TEXT NOT NULL,
-                result TEXT NOT NULL,
-                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-        conn.commit()
+    try:
+        with sqlite3.connect(DATABASE_URL) as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS requests (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    endpoint TEXT NOT NULL,
+                    input_text TEXT NOT NULL,
+                    result TEXT NOT NULL,
+                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            conn.commit()
+        print(f"Database successfully initialized at {DATABASE_URL}")
+    except Exception as e:
+        print(f"Error initializing database: {str(e)}")
+        print(traceback.format_exc())
+        # Continue without failing - if database is not critical
 
 @contextmanager
 def get_db():
-    conn = sqlite3.connect(DATABASE_URL)
+    """Context manager for db connections."""
     try:
+        conn = sqlite3.connect(DATABASE_URL)
         yield conn
+    except Exception as e:
+        print(f"Database connection error: {str(e)}")
+        print(traceback.format_exc())
+        raise
     finally:
-        conn.close()
+        if 'conn' in locals() and conn:
+            conn.close()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -71,13 +84,16 @@ class AIResponse(BaseModel):
     result: str
 
 def log_request(db, endpoint: str, input_text: str, result: str):
-    cursor = db.cursor()
-    cursor.execute("""
-        INSERT INTO requests (endpoint, input_text, result)
-        VALUES (?, ?, ?)
-    """, (endpoint, input_text, result)
-    )
-    db.commit()
+    try:
+        cursor = db.cursor()
+        cursor.execute("""
+            INSERT INTO requests (endpoint, input_text, result)
+            VALUES (?, ?, ?)
+        """, (endpoint, input_text, result)
+        )
+        db.commit()
+    except Exception as e:
+        print(f"Error logging request: {str(e)}")
 
 # Root endpoint
 @app.get("/")
