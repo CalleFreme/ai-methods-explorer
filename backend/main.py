@@ -131,41 +131,39 @@ async def summarize_text(input_data: TextInput):
 # Sentiment Analysis
 @app.post("/api/sentiment")
 async def analyze_sentiment(input_data: TextInput):
-    #API_URL = "https://api-inference.huggingface.co/models/nlp-architect/sentiment-en"
-    API_URL = "https://api-inference.huggingface.co/models/distilbert-base-uncased-finetuned-sst-2-english"
+    # Using a different sentiment analysis model
+    API_URL = "https://api-inference.huggingface.co/models/finiteautomata/bertweet-base-sentiment-analysis"
     headers = {"Authorization": f"Bearer {os.getenv('HF_API_KEY', '')}"}
     
     try:
-        # Truncate text to 512 tokens
-        input_data.text = input_data.text[:512]
         response = requests.post(
             API_URL,
             headers=headers,
             json={"inputs": input_data.text}
         )
         response.raise_for_status()
-        sentiment_data = response.json()[0]
-        if not sentiment_data:
-            raise ValueError("No sentiment data returned from API.")
-
-        # Extract sentiment with highest score
-        if isinstance(sentiment_data, list):
-            # Sort by score
-            sentiment_data = sorted(sentiment_data, key=lambda x: x["score"], reverse=True)[0]
+        sentiment_data = response.json()
+        print(f"API Response: {sentiment_data}")  # Debug log
         
-        result = {
-            "sentiment": sentiment_data["label"],
-            "score": sentiment_data["score"]
+        if not sentiment_data:
+            raise ValueError("Empty response from API")
+            
+        # Process the new model's output format
+        result = sentiment_data[0][0]  # Get the highest confidence result
+        sentiment_map = {
+            "POS": "POSITIVE",
+            "NEG": "NEGATIVE",
+            "NEU": "NEUTRAL"
         }
-        # TODO: Log request to db
-        with get_db() as db:
-            log_request(db, "sentiment", input_data.text, json.dumps(result))
-        return result
-    except requests.exceptions.RequestException as e:   # Catch all requests exceptions
-        if "413" in str(e):  # Payload Too Large
-            raise HTTPException(status_code=400, detail="Text is too long. Please use a shorter text (maximum 500 words).")
+        return {
+            "sentiment": sentiment_map.get(result["label"], "NEUTRAL"),
+            "score": result["score"]
+        }
+    except requests.exceptions.RequestException as e:
+        print(f"API request failed: {str(e)}")
         raise HTTPException(status_code=500, detail=f"API request failed: {str(e)}")
-    except Exception as e:  # Catch all other exceptions
+    except Exception as e:
+        print(f"Processing failed: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error processing request: {str(e)}")
     
 # Get available AI methods
@@ -183,9 +181,10 @@ async def get_available_methods():
             {
                 "id": "sentiment",
                 "name": "Sentiment Analysis",
-                "description": "Analyzes the sentiment, emotional tone of a text (positive/negative) and returns a score.",
-                "model": "distilbert-base-uncased-finetuned-sst-2-english",
-                "endpoint": "/api/sentiment"}
+                "description": "Analyzes the sentiment, emotional tone of a text (positive/negative/neutral) and returns a score.",
+                "model": "finiteautomata/bertweet-base-sentiment-analysis",
+                "endpoint": "/api/sentiment"
+            }
         ]
     }
 

@@ -32,17 +32,22 @@ def test_summarize_text():
     assert "result" in response.json()
 
 def test_analyze_sentiment():
-
     if not os.environ.get("HF_API_KEY"):
         pytest.skip("No HF_API_KEY environment variable set")
 
+    test_text = "I love this tool, it's very useful!"
     response = client.post(
         "/api/sentiment",
-        json={"text": "I love this tool, it's very useful!"}
+        json={"text": test_text}
     )
+    
+    if response.status_code != 200:
+        print(f"Response content: {response.content}")  # Debug output
+        
     assert response.status_code == 200
-    assert "sentiment" in response.json()
-    assert "score" in response.json()
+    data = response.json()
+    assert "sentiment" in data
+    assert "score" in data
 
 
 def test_get_methods():
